@@ -222,4 +222,18 @@ mod name_formatting_tests {
             "&mut T<&mut U>"
         );
     }
+
+    #[test]
+    fn pointers() {
+        assert_eq!(ShortName("*const T").to_string(), "*const T");
+        assert_eq!(ShortName("*mut T").to_string(), "*mut T");
+        assert_eq!(
+            ShortName("*const t::T<*const u::U>").to_string(),
+            "*const T<*const U>"
+        );
+        assert_eq!(
+            ShortName("*mut t::T<*mut u::U>").to_string(),
+            "*mut T<*mut U>"
+        );
+    }
 }
