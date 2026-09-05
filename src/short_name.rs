@@ -70,6 +70,7 @@ impl<'a> core::fmt::Debug for ShortName<'a> {
                     || (c == ']')
                     || (c == ',')
                     || (c == ';')
+                    || (c == '&')
             }) {
                 let segment_to_collapse = rest_of_string
                     .get(0..special_character_index)
@@ -208,6 +209,31 @@ mod name_formatting_tests {
         assert_eq!(
             ShortName("[i32; 16]::default").to_string(),
             "[i32; 16]::default"
+        );
+    }
+
+    #[test]
+    fn references() {
+        assert_eq!(ShortName("&T").to_string(), "&T");
+        assert_eq!(ShortName("&mut T").to_string(), "&mut T");
+        assert_eq!(ShortName("&t::T<&u::U>").to_string(), "&T<&U>");
+        assert_eq!(
+            ShortName("&mut t::T<&mut u::U>").to_string(),
+            "&mut T<&mut U>"
+        );
+    }
+
+    #[test]
+    fn pointers() {
+        assert_eq!(ShortName("*const T").to_string(), "*const T");
+        assert_eq!(ShortName("*mut T").to_string(), "*mut T");
+        assert_eq!(
+            ShortName("*const t::T<*const u::U>").to_string(),
+            "*const T<*const U>"
+        );
+        assert_eq!(
+            ShortName("*mut t::T<*mut u::U>").to_string(),
+            "*mut T<*mut U>"
         );
     }
 }
