@@ -82,6 +82,23 @@ impl<'a> core::fmt::Debug for ShortName<'a> {
                 let special_character =
                     &rest_of_string[special_character_index..=special_character_index];
 
+                if special_character == "<" {
+                    let mut end_lifetime_index = special_character_index + 1;
+                    // Elide lifetime parameters, which always come first in generics.
+                    while rest_of_string[end_lifetime_index..].starts_with("'_, ") {
+                        end_lifetime_index += 4;
+                    }
+                    if rest_of_string[end_lifetime_index..].starts_with("'_>") {
+                        // If all parameters are lifetime parameters,
+                        // also elide the angle brackets.
+                        end_lifetime_index += 3;
+                    } else {
+                        f.write_str("<")?;
+                    }
+                    index += end_lifetime_index;
+                    continue;
+                }
+
                 f.write_str(special_character)?;
 
                 match special_character {
@@ -235,5 +252,15 @@ mod name_formatting_tests {
             ShortName("*mut t::T<*mut u::U>").to_string(),
             "*mut T<*mut U>"
         );
+    }
+
+    #[test]
+    fn lifetimes() {
+        assert_eq!(ShortName("t::T<'_>").to_string(), "T");
+        assert_eq!(ShortName("t::T<'_, '_>").to_string(), "T");
+        assert_eq!(ShortName("t::T<'_, '_, '_>").to_string(), "T");
+        assert_eq!(ShortName("t::T<'_, u::U>").to_string(), "T<U>");
+        assert_eq!(ShortName("t::T<'_, '_, u::U>").to_string(), "T<U>");
+        assert_eq!(ShortName("t::T<'_, '_, '_, u::U>").to_string(), "T<U>");
     }
 }
