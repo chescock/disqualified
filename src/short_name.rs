@@ -131,20 +131,29 @@ impl<'a> core::fmt::Display for ShortName<'a> {
 
 #[inline(always)]
 fn collapse_type_name(string: &str) -> &str {
-    // Enums types are retained.
-    // As heuristic, we assume the enum type to be uppercase.
-    let mut segments = string.rsplit("::");
-    let (last, second_last): (&str, Option<&str>) = (segments.next().unwrap(), segments.next());
-    let Some(second_last) = second_last else {
-        return last;
-    };
-
-    if second_last.starts_with(char::is_uppercase) {
-        let index = string.len() - last.len() - second_last.len() - 2;
-        &string[index..]
-    } else {
-        last
+    // Closures end with some number of `::{{closure}}`,
+    // `::{{call_once}}`, or `::{{call_mut}` segments.
+    // Take only the leftmost, if one exists.
+    let mut closure_start = string.len();
+    let mut closure_end = closure_start;
+    if let Some(end_index) = string.find("}}") {
+        if let Some(start_index) = string[..end_index].find("::{{") {
+            closure_end = end_index + 2;
+            closure_start = start_index;
+        }
     }
+
+    // Trim modules, but not type names.
+    // If the next to last segment is uppercase, assume it is a type.
+    // This covers both enum variants and methods.
+    let mut segments = string[..closure_start].rsplit("::");
+    let last = segments.next().unwrap();
+    let second_last = segments.next();
+    let type_len = second_last
+        .filter(|second_last| second_last.starts_with(char::is_uppercase))
+        .map_or(0, |second_last| second_last.len() + 2);
+    let index = closure_start - last.len() - type_len;
+    &string[index..closure_end]
 }
 
 #[cfg(all(test, feature = "alloc"))]
@@ -154,6 +163,12 @@ mod name_formatting_tests {
     #[test]
     fn trivial() {
         assert_eq!(ShortName("test_system").to_string(), "test_system");
+    }
+
+    #[test]
+    fn empty() {
+        assert_eq!(ShortName("").to_string(), "");
+        assert_eq!(ShortName("::").to_string(), "");
     }
 
     #[test]
@@ -262,5 +277,54 @@ mod name_formatting_tests {
         assert_eq!(ShortName("t::T<'_, u::U>").to_string(), "T<U>");
         assert_eq!(ShortName("t::T<'_, '_, u::U>").to_string(), "T<U>");
         assert_eq!(ShortName("t::T<'_, '_, '_, u::U>").to_string(), "T<U>");
+    }
+
+    #[test]
+    fn functions() {
+        assert_eq!(ShortName("m::f").to_string(), "f");
+        assert_eq!(ShortName("m::f::{{closure}}").to_string(), "f::{{closure}}");
+        assert_eq!(ShortName("m::Ty::f").to_string(), "Ty::f");
+        assert_eq!(
+            ShortName("m::Ty::f::{{closure}}").to_string(),
+            "Ty::f::{{closure}}"
+        );
+        assert_eq!(ShortName("m::Ty<t::T>::f").to_string(), "Ty<T>::f");
+        assert_eq!(
+            ShortName("m::Ty<t::T>::f::{{closure}}").to_string(),
+            "Ty<T>::f::{{closure}}"
+        );
+
+        assert_eq!(ShortName("m::f<t::T>").to_string(), "f<T>");
+        assert_eq!(
+            ShortName("m::f<t::T>::{{closure}}").to_string(),
+            "f<T>::{{closure}}"
+        );
+        assert_eq!(ShortName("m::Ty::f<t::T>").to_string(), "Ty::f<T>");
+        assert_eq!(
+            ShortName("m::Ty::f<t::T>::{{closure}}").to_string(),
+            "Ty::f<T>::{{closure}}"
+        );
+        assert_eq!(ShortName("m::Ty<t::T>::f<t::T>").to_string(), "Ty<T>::f<T>");
+        assert_eq!(
+            ShortName("m::Ty<t::T>::f<t::T>::{{closure}}").to_string(),
+            "Ty<T>::f<T>::{{closure}}"
+        );
+
+        assert_eq!(
+            ShortName("m::f::{{closure}}::{{closure}}").to_string(),
+            "f::{{closure}}"
+        );
+        assert_eq!(
+            ShortName("m::f::{{closure}}::{{closure}}::{{call_once}}").to_string(),
+            "f::{{closure}}"
+        );
+        assert_eq!(
+            ShortName("m::Ty::f::{{closure}}::{{closure}}").to_string(),
+            "Ty::f::{{closure}}"
+        );
+        assert_eq!(
+            ShortName("m::Ty::f::{{closure}}::{{closure}}::{{call_once}}").to_string(),
+            "Ty::f::{{closure}}"
+        );
     }
 }
